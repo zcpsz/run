@@ -2,7 +2,7 @@
 set -e
 
 # Vector macOS Installer Script (No Homebrew or Xcode)
-# Direct binary installation
+# Automatically uses the latest stable version
 
 # Color setup
 BOLD='\033[1m'
@@ -13,7 +13,6 @@ YELLOW='\033[33m'
 NO_COLOR='\033[0m'
 
 # Variables
-VECTOR_VERSION="0.36.0"  # Update this to the latest stable version
 INSTALL_DIR="/usr/local/vector"
 BINARY_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/vector"
@@ -66,6 +65,23 @@ check_platform() {
   info "Detected macOS architecture: $ARCH"
 }
 
+# Get the latest Vector version
+get_latest_version() {
+  info "Determining the latest Vector version..."
+  
+  # Try to get the latest version from GitHub API
+  LATEST_VERSION=$(curl -s https://api.github.com/repos/vectordotdev/vector/releases/latest | grep -o '"tag_name": "v[^"]*' | sed 's/"tag_name": "v//')
+  
+  if [ -z "$LATEST_VERSION" ]; then
+    # Fallback to a known recent version if API call fails
+    warn "Could not determine the latest version. Using default fallback version."
+    LATEST_VERSION="0.37.0"
+  fi
+  
+  info "Latest Vector version: $LATEST_VERSION"
+  VECTOR_VERSION=$LATEST_VERSION
+}
+
 # Download Vector binary
 download_vector() {
   info "Downloading Vector ${VECTOR_VERSION} for macOS ($ARCH)..."
@@ -74,11 +90,37 @@ download_vector() {
   DOWNLOAD_URL="https://packages.timber.io/vector/${VECTOR_VERSION}/vector-${VECTOR_VERSION}-${ARCH}-apple-darwin.tar.gz"
   
   # Download the archive
+  info "Downloading from: $DOWNLOAD_URL"
   curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
   
   if [ $? -ne 0 ]; then
-    error "Failed to download Vector. Please check your internet connection and the version specified."
-    exit 1
+    error "Failed to download Vector. Trying alternative download location..."
+    
+    # Try alternative download URL format
+    DOWNLOAD_URL="https://github.com/vectordotdev/vector/releases/download/v${VECTOR_VERSION}/vector-${VECTOR_VERSION}-${ARCH}-apple-darwin.tar.gz"
+    info "Trying: $DOWNLOAD_URL"
+    curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
+    
+    if [ $? -ne 0 ]; then
+      error "Failed to download Vector. Please check your internet connection."
+      
+      # If on ARM and specific version has no ARM binary, try x86_64 with Rosetta
+      if [ "$ARCH" = "aarch64" ]; then
+        warn "ARM binary not available. Attempting to download x86_64 version to use with Rosetta 2..."
+        DOWNLOAD_URL="https://github.com/vectordotdev/vector/releases/download/v${VECTOR_VERSION}/vector-${VECTOR_VERSION}-x86_64-apple-darwin.tar.gz"
+        curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
+        
+        if [ $? -ne 0 ]; then
+          error "All download attempts failed. Please try a different version or installation method."
+          exit 1
+        fi
+        
+        info "Downloaded x86_64 version. Will use with Rosetta 2 translation."
+      else
+        error "Download failed. Please try a different version or installation method."
+        exit 1
+      fi
+    fi
   fi
   
   # Extract the archive
@@ -89,10 +131,15 @@ download_vector() {
   # Create installation directories
   mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
   
+  # Find the extracted directory
+  EXTRACTED_DIR=$(find "$TEMP_DIR/extract" -type d -name "vector*" -depth 1 2>/dev/null || echo "$TEMP_DIR/extract")
+  
   # Copy files to the installation directory
-  cp -r "$TEMP_DIR/extract"/*/* "$INSTALL_DIR"
+  info "Installing Vector to $INSTALL_DIR"
+  cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR" 2>/dev/null || cp -r "$TEMP_DIR/extract"/* "$INSTALL_DIR"
   
   # Create symbolic link to make vector available in PATH
+  info "Creating symbolic link in $BINARY_DIR"
   ln -sf "$INSTALL_DIR/bin/vector" "$BINARY_DIR/vector"
   
   # Copy default config
@@ -100,12 +147,35 @@ download_vector() {
     cp "$INSTALL_DIR/etc/vector/vector.toml" "$CONFIG_DIR/vector.toml"
   elif [ -f "$INSTALL_DIR/config/vector.toml" ]; then
     cp "$INSTALL_DIR/config/vector.toml" "$CONFIG_DIR/vector.toml"
+  else
+    # Create basic config if none found
+    cat > "$CONFIG_DIR/vector.toml" << EOL
+# Vector configuration
+
+data_dir = "${DATA_DIR}"
+
+# Sample source
+[sources.stdin]
+type = "stdin"
+
+# Sample sink
+[sinks.console]
+type = "console"
+inputs = ["stdin"]
+encoding.codec = "json"
+EOL
+    info "Created basic Vector configuration at $CONFIG_DIR/vector.toml"
   fi
+  
+  # Set correct permissions
+  chown -R root:wheel "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
+  chmod -R 755 "$INSTALL_DIR" "$BINARY_DIR"
+  chmod -R 644 "$CONFIG_DIR"/*
   
   # Clean up temp files
   rm -rf "$TEMP_DIR"
   
-  success "Vector has been downloaded and extracted to $INSTALL_DIR"
+  success "Vector has been installed to $INSTALL_DIR"
 }
 
 # Create Vector service for launchd
@@ -156,6 +226,12 @@ verify_installation() {
   if command -v vector &> /dev/null; then
     INSTALLED_VERSION=$(vector --version | head -n 1 || echo "Unknown")
     success "Vector ${INSTALLED_VERSION} is installed and available!"
+    
+    # Test that it runs
+    vector --version > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+      warn "Vector command executed but returned an error. There might be configuration issues."
+    fi
   else
     error "Vector installation verification failed. Please try installing again."
     exit 1
@@ -165,14 +241,15 @@ verify_installation() {
 # Main installation process
 main() {
   echo -e "${BOLD}Vector Direct Installer for macOS${NO_COLOR}"
-  echo "This script will install Vector directly without using Homebrew or Xcode."
+  echo "This script will install the latest Vector version directly without using Homebrew or Xcode."
   
   # Check system requirements
   check_privileges
   check_platform
+  get_latest_version
   
   # Ask for confirmation
-  read -p "Do you want to proceed with the installation? (y/n) " -n 1 -r
+  read -p "Do you want to proceed with the installation of Vector ${VECTOR_VERSION}? (y/n) " -n 1 -r
   echo
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     info "Installation cancelled."
