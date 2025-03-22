@@ -3,17 +3,6 @@ set -e
 
 # Vector macOS Installer Script (No Homebrew or Xcode)
 # Automatically uses the latest stable version
-<<<<<<< HEAD:vector_for_macos.sh
-
-# Color setup
-BOLD='\033[1m'
-RED='\033[31m'
-GREEN='\033[32m'
-BLUE='\033[34m'
-YELLOW='\033[33m'
-NO_COLOR='\033[0m'
-=======
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
 
 # Variables
 INSTALL_DIR="/usr/local/vector"
@@ -104,11 +93,7 @@ download_vector() {
       error "Failed to download Vector. Please check your internet connection."
       
       # If on ARM and specific version has no ARM binary, try x86_64 with Rosetta
-<<<<<<< HEAD:vector_for_macos.sh
-      if [ "$ARCH" = "aarch64" ]; then
-=======
       if [ "$ARCH" = "arm64" ]; then
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
         warn "ARM binary not available. Attempting to download x86_64 version to use with Rosetta 2..."
         DOWNLOAD_URL="https://github.com/vectordotdev/vector/releases/download/v${VECTOR_VERSION}/vector-${VECTOR_VERSION}-x86_64-apple-darwin.tar.gz"
         curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
@@ -156,20 +141,6 @@ download_vector() {
   else
     # Create basic config if none found
     cat > "$CONFIG_DIR/vector.toml" << EOL
-<<<<<<< HEAD:vector_for_macos.sh
-# Vector configuration
-
-data_dir = "${DATA_DIR}"
-
-# Sample source
-[sources.stdin]
-type = "stdin"
-
-# Sample sink
-[sinks.console]
-type = "console"
-inputs = ["stdin"]
-=======
 # Source: Collect host metrics
 [sources.host_metrics]
 type = "host_metrics"
@@ -192,20 +163,15 @@ scrape_interval_secs = 10
 [sinks.to_debian_vector]
 type = "socket"
 inputs = ["host_metrics"]
-address = "vector.innospike.com"
+address = "100.70.153.96:9000"
 mode = "tcp"
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
 encoding.codec = "json"
 EOL
     info "Created basic Vector configuration at $CONFIG_DIR/vector.toml"
   fi
   
   # Set correct permissions
-<<<<<<< HEAD:vector_for_macos.sh
-  chown -R root:wheel "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR"
-=======
   chown -R root:wheel "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$BINARY_DIR"
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
   chmod -R 755 "$INSTALL_DIR" "$BINARY_DIR"
   chmod -R 644 "$CONFIG_DIR"/*
   
@@ -277,28 +243,13 @@ verify_installation() {
 
 # Main installation process
 main() {
-<<<<<<< HEAD:vector_for_macos.sh
-  echo -e "${BOLD}Vector Direct Installer for macOS${NO_COLOR}"
-=======
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
   echo "This script will install the latest Vector version directly without using Homebrew or Xcode."
   
   # Check system requirements
   check_privileges
   check_platform
   get_latest_version
-<<<<<<< HEAD:vector_for_macos.sh
-  
-  # Ask for confirmation
-  read -p "Do you want to proceed with the installation of Vector ${VECTOR_VERSION}? (y/n) " -n 1 -r
-  echo
-  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    info "Installation cancelled."
-    exit 0
-  fi
-=======
->>>>>>> ea4c510 (Make script running without interractions):vector_vm_for_macos.sh
-  
+
   # Download and install Vector
   download_vector
   
