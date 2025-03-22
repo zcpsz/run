@@ -202,7 +202,7 @@ EOL
   
   # Load the service
   launchctl load /Library/LaunchDaemons/dev.vector.daemon.plist
-  
+} 
 
 # Verify the installation
 verify_installation() {
@@ -231,6 +231,9 @@ main() {
 
   # Download and install Vector
   download_vector
+  
+  #Setup vector as a service
+  setup_vector_service
   
   # Verify installation
   verify_installation
