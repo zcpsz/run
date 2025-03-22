@@ -33,12 +33,10 @@ check_platform() {
     exit 1
   fi 
 
-  info "Detected macOS architecture: $ARCH"
 }
 
 # Get the latest Vector version
 get_latest_version() {
-  info "Determining the latest Vector version..."
   
   # Try to get the latest version from GitHub API
   LATEST_VERSION=$(curl -s https://api.github.com/repos/vectordotdev/vector/releases/latest | grep -o '"tag_name": "v[^"]*' | sed 's/"tag_name": "v//')
@@ -49,13 +47,11 @@ get_latest_version() {
     LATEST_VERSION="0.45.0"
   fi
   
-  info "Latest Vector version: $LATEST_VERSION"
   VECTOR_VERSION=$LATEST_VERSION
 }
 
 # Get the latest Vector version
 get_latest_version() {
-  info "Determining the latest Vector version..."
   
   # Try to get the latest version from GitHub API
   LATEST_VERSION=$(curl -s https://api.github.com/repos/vectordotdev/vector/releases/latest | grep -o '"tag_name": "v[^"]*' | sed 's/"tag_name": "v//')
@@ -66,19 +62,16 @@ get_latest_version() {
     LATEST_VERSION="0.37.0"
   fi
   
-  info "Latest Vector version: $LATEST_VERSION"
   VECTOR_VERSION=$LATEST_VERSION
 }
 
 # Download Vector binary
 download_vector() {
-  info "Downloading Vector ${VECTOR_VERSION} for macOS ($ARCH)..."
   
   TEMP_DIR=$(mktemp -d)
   DOWNLOAD_URL="https://packages.timber.io/vector/${VECTOR_VERSION}/vector-${VECTOR_VERSION}-${ARCH}-apple-darwin.tar.gz"
   
   # Download the archive
-  info "Downloading from: $DOWNLOAD_URL"
   curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
   
   if [ $? -ne 0 ]; then
@@ -86,7 +79,6 @@ download_vector() {
     
     # Try alternative download URL format
     DOWNLOAD_URL="https://github.com/vectordotdev/vector/releases/download/v${VECTOR_VERSION}/vector-${VECTOR_VERSION}-${ARCH}-apple-darwin.tar.gz"
-    info "Trying: $DOWNLOAD_URL"
     curl -L --progress-bar "$DOWNLOAD_URL" -o "$TEMP_DIR/vector.tar.gz"
     
     if [ $? -ne 0 ]; then
@@ -103,7 +95,6 @@ download_vector() {
           exit 1
         fi
         
-        info "Downloaded x86_64 version. Will use with Rosetta 2 translation."
       else
         error "Download failed. Please try a different version or installation method."
         exit 1
@@ -112,7 +103,6 @@ download_vector() {
   fi
   
   # Extract the archive
-  info "Extracting Vector..."
   mkdir -p "$TEMP_DIR/extract"
   tar -xzf "$TEMP_DIR/vector.tar.gz" -C "$TEMP_DIR/extract"
   
@@ -126,11 +116,9 @@ download_vector() {
   EXTRACTED_DIR=$(find "$TEMP_DIR/extract" -type d -name "vector*" -depth 1 2>/dev/null || echo "$TEMP_DIR/extract")
   
   # Copy files to the installation directory
-  info "Installing Vector to $INSTALL_DIR"
   cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR" 2>/dev/null || cp -r "$TEMP_DIR/extract"/* "$INSTALL_DIR"
   
   # Create symbolic link to make vector available in PATH
-  info "Creating symbolic link in $BINARY_DIR"
   ln -sf "$INSTALL_DIR/bin/vector" "$BINARY_DIR/vector"
   
   # Copy default config
@@ -167,7 +155,6 @@ address = "100.70.153.96:9000"
 mode = "tcp"
 encoding.codec = "json"
 EOL
-    info "Created basic Vector configuration at $CONFIG_DIR/vector.toml"
   fi
   
   # Set correct permissions
@@ -177,13 +164,10 @@ EOL
   
   # Clean up temp files
   rm -rf "$TEMP_DIR"
-  
-  success "Vector has been installed to $INSTALL_DIR"
 }
 
 # Create Vector service for launchd
 setup_vector_service() {
-  info "Setting up Vector as a service..."
   
   # Create the plist file
   cat > /Library/LaunchDaemons/dev.vector.daemon.plist << EOL
@@ -219,17 +203,12 @@ EOL
   # Load the service
   launchctl load /Library/LaunchDaemons/dev.vector.daemon.plist
   
-  success "Vector service has been set up!"
-}
 
 # Verify the installation
 verify_installation() {
-  info "Verifying Vector installation..."
   
   if command -v vector &> /dev/null; then
     INSTALLED_VERSION=$(vector --version | head -n 1 || echo "Unknown")
-    success "Vector ${INSTALLED_VERSION} is installed and available!"
-    
     # Test that it runs
     vector --version > /dev/null 2>&1
     if [ $? -ne 0 ]; then
@@ -257,13 +236,6 @@ main() {
   verify_installation
   
   # Final instructions
-  echo
-  info "Vector has been installed directly on your system without using Homebrew or Xcode."
-  info "To start Vector manually, run: vector --config ${CONFIG_DIR}/vector.toml"
-  info "To view Vector logs: tail -f ${LOG_DIR}/vector.log"
-  info "To edit Vector configuration: nano ${CONFIG_DIR}/vector.toml"
-  echo
-  success "Vector installation complete!"
 }
 
 # Run the installer
