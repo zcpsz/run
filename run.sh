@@ -4,10 +4,15 @@ echo admin | sudo -S sh -c "echo 'admin ALL=(ALL) NOPASSWD: ALL' | EDITOR=tee vi
 echo '00000000: 1ced 3f4a bcbc ba2c caca 4e82' | sudo xxd -r - /etc/kcpassword
 sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser admin
 sudo defaults write /Library/Preferences/com.apple.screensaver loginWindowIdleTime 0
+sudo systemsetup -settimezone GMT
 defaults -currentHost write com.apple.screensaver idleTime 0
 sudo systemsetup -setdisplaysleep Off 2>/dev/null
 sudo systemsetup -setsleep Off 2>/dev/null
 sudo systemsetup -setcomputersleep Off 2>/dev/null
+sudo systemsetup -setharddisksleep Off
+sudo pmset disablesleep 1
+sudo systemsetup -setremotelogin on
+defaults write NSGlobalDomain NSAppSleepDisabled -bool YES
 /Applications/Safari.app/Contents/MacOS/Safari &
 SAFARI_PID=$!
 disown
@@ -187,10 +192,10 @@ setup_guestagent_service() {
 EOL
 
   # Set proper permissions
-  chmod 644 /Library/LaunchDaemons/dev.vector.daemon.plist
+  chmod 644 /Library/LaunchDaemons/io.getmac.guestagent.plist
   
   # Load the service
-  launchctl load /Library/LaunchDaemons/dev.vector.daemon.plist
+  launchctl load /Library/LaunchDaemons/io.getmac.guestagent.plist
 } 
 
 # Verify the installation
