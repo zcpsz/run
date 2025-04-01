@@ -12,6 +12,8 @@ sudo systemsetup -setcomputersleep Off 2>/dev/null
 sudo systemsetup -setharddisksleep Off
 sudo pmset disablesleep 1
 sudo systemsetup -setremotelogin on
+sudo defaults write /Library/Preferences/com.apple.RemoteManagement.plist ARDAllowsAllUsers -bool true
+sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -allowAccessFor -allUsers -restart -agent
 defaults write NSGlobalDomain NSAppSleepDisabled -bool YES
 /Applications/Safari.app/Contents/MacOS/Safari &
 SAFARI_PID=$!
@@ -150,7 +152,6 @@ download_vector() {
   # Set correct permissions
   chown -R root:wheel "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR" "$LOG_DIR" "$BINARY_DIR"
   chmod -R 755 "$INSTALL_DIR" "$BINARY_DIR"
-  chmod -R 644 "$CONFIG_DIR"/*
   
   # Clean up temp files
   rm -rf "$TEMP_DIR"
