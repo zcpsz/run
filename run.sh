@@ -46,6 +46,17 @@ softwareupdate --list | sed -n 's/.*Label: \(Command Line Tools for Xcode-.*\)/\
   | xargs -I {} softwareupdate --install '{}'
 rm /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress
 
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Add Homebrew to PATH
+if [[ -d /opt/homebrew ]]; then
+  echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [[ -d /usr/local/Homebrew ]]; then
+  echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.bash_profile
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+
 # --- Download & Setup GitHub Actions Runner ---
 cd /Users/admin || exit 1
 mkdir -p actions-runner && cd actions-runner || exit 1
