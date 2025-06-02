@@ -1,0 +1,69 @@
+name: Audit Apple Silicon Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-runner:
+    runs-on: macos-14
+
+    steps:
+      - name: Show CPU architecture
+        run: uname -m  # Expect: arm64
+
+      - name: Show macOS version
+        run: sw_vers
+
+      - name: List installed Homebrew packages
+        run: brew list --versions
+
+      - name: List installed Homebrew casks
+        run: brew list --cask --versions
+
+      - name: List global npm packages
+        run: npm list -g --depth=0
+
+      - name: List global Python packages
+        run: pip3 list
+
+      - name: List Ruby gems
+        run: gem list
+
+      - name: Show installed Xcode versions
+        run: ls -l /Applications | grep Xcode
+
+      - name: Print selected Xcode path
+        run: xcode-select -p
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: List installed SDKs
+        run: xcodebuild -showsdks
+
+      - name: Show available simulators
+        run: xcrun simctl list devices
+
+      - name: Show available runtimes
+        run: xcrun simctl list runtimes
+
+      - name: Check for installed compilers
+        run: |
+          clang --version
+          gcc --version
+
+      - name: List all installed shells
+        run: cat /etc/shells
+
+      - name: Check available languages
+        run: ls /Library/Developer/CommandLineTools/usr/bin | grep -E 'clang|swift|gcc|g++|make|go|ruby|python|perl'
+
+      - name: Dump environment variables
+        run: printenv | sort
+
+      - name: Disk usage overview
+        run: df -h
+
+      - name: Show running processes (snapshot)
+        run: ps aux | head -20
+
