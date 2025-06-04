@@ -57,6 +57,55 @@ elif [[ -d /usr/local/Homebrew ]]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+brew update
+
+# Install common packages
+brew install \
+  git \
+  node \
+  python3 \
+  ruby \
+  swiftlint \
+  cocoapods \
+  carthage \
+  fastlane \
+  wget \
+  cmake \
+  openssl \
+  pkg-config \
+  jq \
+  awscli \
+  azure-cli \
+  google-cloud-sdk
+
+# Install cask applications
+brew install --cask \
+  visual-studio-code \
+  xquartz
+
+# Install Python packages
+pip3 install --upgrade pip
+pip3 install \
+  virtualenv \
+  flake8 \
+  black
+
+# Install Ruby gems
+gem install \
+  bundler \
+  rake
+
+# Install global npm packages
+npm install -g \
+  yarn \
+  eslint \
+  typescript
+
+sudo gem install xcode-install
+xcversion login
+xcversion list
+xcversion install 16.0
+
 # --- Download & Setup GitHub Actions Runner ---
 cd /Users/admin || exit 1
 mkdir -p actions-runner && cd actions-runner || exit 1
