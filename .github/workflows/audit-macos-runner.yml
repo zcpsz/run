@@ -47,10 +47,11 @@ jobs:
       - name: Show available runtimes
         run: xcrun simctl list runtimes || echo "xcrun not found"
 
-      - name: Check for installed compilers
-        run: |
-          clang --version || echo "clang not found"
-          gcc --version || echo "gcc not found"
+      - name: Check for installed compiler clang
+        run: clang --version || echo "clang not found"
+
+      - name: Check for installed compiler gcc
+        run: gcc --version || echo "gcc not found"
 
       - name: List all installed shells
         run: cat /etc/shells || echo "/etc/shells not found"
