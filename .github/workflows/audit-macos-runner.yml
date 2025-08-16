@@ -5,7 +5,7 @@ on:
 
 jobs:
   audit-runner:
-    runs-on: macos-14
+    runs-on: getmac-latest
 
     steps:
       - name: Show CPU architecture
