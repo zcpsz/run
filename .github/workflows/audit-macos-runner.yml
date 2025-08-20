@@ -131,7 +131,7 @@ jobs:
         run: ps aux | head -20 || echo "ps not found"
 
   audit-runner-namespace:
-    runs-on: namespace-profile-default
+    runs-on: namespace-profile-macos
 
     steps:
       - name: Show CPU architecture
