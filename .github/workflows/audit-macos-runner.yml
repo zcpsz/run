@@ -8,6 +8,9 @@ jobs:
     runs-on: getmac-latest
 
     steps:
+      - name: Chceck keychains
+        run: security list-keychain
+
       - name: Show CPU architecture
         run: uname -m || echo "uname not found"
 
@@ -71,6 +74,9 @@ jobs:
     runs-on: macos-15
 
     steps:
+      - name: Chceck keychains
+        run: security list-keychain
+
       - name: Show CPU architecture
         run: uname -m || echo "uname not found"
 
@@ -134,6 +140,9 @@ jobs:
     runs-on: namespace-profile-macos
 
     steps:
+      - name: Chceck keychains
+        run: security list-keychain
+
       - name: Show CPU architecture
         run: uname -m || echo "uname not found"
 
