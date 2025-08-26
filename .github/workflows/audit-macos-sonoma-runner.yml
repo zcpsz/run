@@ -6,6 +6,8 @@ on:
   audit-runner-namespace:
     runs-on: namespace-profile-macos-sonoma
 
+
+  jobs:
     steps:
       - name: Chceck keychains
         run: security list-keychain
