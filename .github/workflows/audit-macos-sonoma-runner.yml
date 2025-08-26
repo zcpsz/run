@@ -1,4 +1,4 @@
-name: Audit Apple Silicon Runner
+name: Audit Apple Silicon Sonoma Runner
 
 on:
   workflow_dispatch:
