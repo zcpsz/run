@@ -3,11 +3,10 @@ name: Audit Apple Silicon Sonoma Runner
 on:
   workflow_dispatch:
 
+jobs:
   audit-runner-namespace:
     runs-on: namespace-profile-macos-sonoma
 
-
-  jobs:
     steps:
       - name: Chceck keychains
         run: security list-keychain
