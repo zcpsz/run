@@ -1,0 +1,71 @@
+name: Audit Apple Silicon Tahoe Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  audit-runner-namespace:
+    runs-on: namespace-profile-macos-tahoe
+
+    steps:
+      - name: Chceck keychains
+        run: security list-keychain
+
+      - name: Show CPU architecture
+        run: uname -m || echo "uname not found"
+
+      - name: Show macOS version
+        run: sw_vers || echo "sw_vers not found"
+
+      - name: List installed Homebrew packages
+        run: brew list --versions || echo "brew not found"
+
+      - name: List installed Homebrew casks
+        run: brew list --cask --versions || echo "brew not found"
+
+      - name: List global npm packages
+        run: npm list -g --depth=0 || echo "npm not found"
+
+      - name: List global Python packages
+        run: pip3 list || echo "pip3 not found"
+
+      - name: List Ruby gems
+        run: gem list || echo "gem not found"
+
+      - name: Show installed Xcode versions
+        run: ls -l /Applications | grep Xcode || echo "No Xcode found"
+
+      - name: Print selected Xcode path
+        run: xcode-select -p || echo "xcode-select not found"
+
+      - name: Show Xcode version
+        run: xcodebuild -version || echo "xcodebuild not found"
+
+      - name: List installed SDKs
+        run: xcodebuild -showsdks || echo "xcodebuild not found"
+
+      - name: Show available simulators
+        run: xcrun simctl list devices || echo "xcrun not found"
+
+      - name: Show available runtimes
+        run: xcrun simctl list runtimes || echo "xcrun not found"
+
+      - name: Check for installed compilers
+        run: |
+          clang --version || echo "clang not found"
+          gcc --version || echo "gcc not found"
+
+      - name: List all installed shells
+        run: cat /etc/shells || echo "/etc/shells not found"
+
+      - name: Check available languages
+        run: ls /Library/Developer/CommandLineTools/usr/bin | grep -E 'clang|swift|gcc|g++|make|go|ruby|python|perl' || echo "Developer tools not found"
+
+      - name: Dump environment variables
+        run: printenv | sort || echo "printenv not available"
+
+      - name: Disk usage overview
+        run: df -h || echo "df not found"
+
+      - name: Show running processes (snapshot)
+        run: ps aux | head -20 || echo "ps not found"
