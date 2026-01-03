@@ -57,16 +57,16 @@ jobs:
           pod install --repo-update
         shell: bash
 
-      - name: "🏋️ Run Heavy Load (The Fix)"
+      - name: "🏋️ Run Heavy Load"
         run: |
-          # CHANGED: -project to -workspace
-          # CHANGED: Added -scheme to ensure we pick the right target
-
           xcodebuild -workspace XcodeBenchmark.xcworkspace \
             -scheme XcodeBenchmark \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -destination 'generic/platform=iOS' \
             clean build \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
             -parallelizeTargets \
             -jobs 8 \
             -quiet
