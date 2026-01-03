@@ -70,8 +70,8 @@ jobs:
       - name: Show running processes (snapshot)
         run: ps aux | head -20 || echo "ps not found"
 
-  audit-runner-namespace:
-    runs-on: namespace-profile-macos-sonoma
+  audit-runner-github:
+    runs-on: macos-14
 
     steps:
       - name: Chceck keychains

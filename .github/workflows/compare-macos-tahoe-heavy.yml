@@ -14,15 +14,15 @@ jobs:
           - provider: 'GitHub Cloud'
             # 'macos-15' is Sequoia. If GitHub has released 'macos-26' image, use that.
             # In early 2026, 'macos-latest' likely points to macOS 15 or 16.
-            runner: macos-latest
-            os: 'macOS Latest'
+            runner: macos-26
+            os: 'GitHub macOS Tahoe'
 
           # --- CONTENDER 2: GetMac.io (Self-Hosted) ---
             # IMPORTANT: Ensure your GetMac.io runner has these labels or update this line
             # You must manually update this machine to macOS 26 Tahoe to test "Version 26"
           - provider: 'GetMac.io'
             runner: getmac-tahoe
-            os: 'macOS 26 (Self-Hosted)'
+            os: 'GetMac macOS Tahoe '
 
     runs-on: ${{ matrix.runner }}
 
@@ -44,14 +44,21 @@ jobs:
           xcodebuild -version
         shell: bash
 
-      - name: 🏋️ Run Heavy Load (Xcode 26 Style)
+      - name: "📦 Install Dependencies (CocoaPods)"
         run: |
-          # We disable indexing to focus purely on CPU/RAM build performance
-          # We force a clean build every time to prevent cache cheating
+          # We run this to ensure the workspace and pod linkages are generated correctly
+          # for the current machine's architecture.
+          pod install --repo-update
+        shell: bash
 
-          xcodebuild -project XcodeBenchmark.xcodeproj \
+      - name: "🏋️ Run Heavy Load (The Fix)"
+        run: |
+          # CHANGED: -project to -workspace
+          # CHANGED: Added -scheme to ensure we pick the right target
+
+          xcodebuild -workspace XcodeBenchmark.xcworkspace \
             -scheme XcodeBenchmark \
-            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
             clean build \
             COMPILER_INDEX_STORE_ENABLE=NO \
             -parallelizeTargets \
