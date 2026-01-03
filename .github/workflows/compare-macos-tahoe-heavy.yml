@@ -1,0 +1,65 @@
+name: "⚔️ Runner Battle: GitHub vs GetMac.io"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: ${{ matrix.provider }} (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- CONTENDER 1: GitHub Hosted ---
+          - provider: 'GitHub Cloud'
+            # 'macos-15' is Sequoia. If GitHub has released 'macos-26' image, use that.
+            # In early 2026, 'macos-latest' likely points to macOS 15 or 16.
+            runner: macos-latest
+            os: 'macOS Latest'
+
+          # --- CONTENDER 2: GetMac.io (Self-Hosted) ---
+            # IMPORTANT: Ensure your GetMac.io runner has these labels or update this line
+            # You must manually update this machine to macOS 26 Tahoe to test "Version 26"
+          - provider: 'GetMac.io'
+            runner: getmac-tahoe
+            os: 'macOS 26 (Self-Hosted)'
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: Checkout Benchmark Repo
+        uses: actions/checkout@v4
+        with:
+          repository: devMEremenko/XcodeBenchmark
+          ref: master
+
+      - name: 🔍 Check Specs
+        run: |
+          echo "--- Hardware Info ---"
+          system_profiler SPHardwareDataType | grep "Memory"
+          system_profiler SPHardwareDataType | grep "Chip"
+
+          echo "--- Software Info ---"
+          sw_vers
+          xcodebuild -version
+        shell: bash
+
+      - name: 🏋️ Run Heavy Load (Xcode 26 Style)
+        run: |
+          # We disable indexing to focus purely on CPU/RAM build performance
+          # We force a clean build every time to prevent cache cheating
+
+          xcodebuild -project XcodeBenchmark.xcodeproj \
+            -scheme XcodeBenchmark \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
+            clean build \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            -parallelizeTargets \
+            -jobs 8 \
+            -quiet
+        shell: bash
+
+      - name: ⏱️ Report Time
+        if: always()
+        run: |
+          echo "Build finished on ${{ matrix.provider }}"
