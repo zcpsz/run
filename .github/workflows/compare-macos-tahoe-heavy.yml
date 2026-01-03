@@ -39,6 +39,12 @@ jobs:
           system_profiler SPHardwareDataType | grep "Memory"
           system_profiler SPHardwareDataType | grep "Chip"
 
+          echo "--- Remote Access Info ---"
+          echo "ssh:"
+          sudo systemsetup -getremotelogin
+          echo "vnc:"
+          launchctl list | grep -E 'com.apple.screensharing|com.apple.RemoteDesktop'
+
           echo "--- Software Info ---"
           sw_vers
           xcodebuild -version
@@ -58,7 +64,7 @@ jobs:
 
           xcodebuild -workspace XcodeBenchmark.xcworkspace \
             -scheme XcodeBenchmark \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
             clean build \
             COMPILER_INDEX_STORE_ENABLE=NO \
             -parallelizeTargets \
