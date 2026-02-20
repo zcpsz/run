@@ -3,7 +3,7 @@ steps:
     agents:
       queue: "local-mac-queue"
     plugins:
-      - getmac/getmac#v1.0.0:
+      - getmac-io/getmac#main:
           project-id: "3a0496a7-83a5-4380-9db8-25246cd3a54d" # Make sure to replace this
           image: "macos-tahoe"
     command: |
