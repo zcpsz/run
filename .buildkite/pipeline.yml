@@ -1,0 +1,67 @@
+steps:
+  - label: ":mac: Audit Runner GetMac"
+    plugins:
+      - getmac/getmac#v1.0.0:
+          project-id: "3a0496a7-83a5-4380-9db8-25246cd3a54d" # Make sure to replace this
+          image: "macos-tahoe"
+    command: |
+      echo "--- Check keychains"
+      security list-keychain
+
+      echo "--- Show CPU architecture"
+      uname -m || echo "uname not found"
+
+      echo "--- Show macOS version"
+      sw_vers || echo "sw_vers not found"
+
+      echo "--- List installed Homebrew packages"
+      brew list --versions || echo "brew not found"
+
+      echo "--- List installed Homebrew casks"
+      brew list --cask --versions || echo "brew not found"
+
+      echo "--- List global npm packages"
+      npm list -g --depth=0 || echo "npm not found"
+
+      echo "--- List global Python packages"
+      pip3 list || echo "pip3 not found"
+
+      echo "--- List Ruby gems"
+      gem list || echo "gem not found"
+
+      echo "--- Show installed Xcode versions"
+      ls -l /Applications | grep Xcode || echo "No Xcode found"
+
+      echo "--- Print selected Xcode path"
+      xcode-select -p || echo "xcode-select not found"
+
+      echo "--- Show Xcode version"
+      xcodebuild -version || echo "xcodebuild not found"
+
+      echo "--- List installed SDKs"
+      xcodebuild -showsdks || echo "xcodebuild not found"
+
+      echo "--- Show available simulators"
+      xcrun simctl list devices || echo "xcrun not found"
+
+      echo "--- Show available runtimes"
+      xcrun simctl list runtimes || echo "xcrun not found"
+
+      echo "--- Check for installed compilers"
+      clang --version || echo "clang not found"
+      gcc --version || echo "gcc not found"
+
+      echo "--- List all installed shells"
+      cat /etc/shells || echo "/etc/shells not found"
+
+      echo "--- Check available languages"
+      ls /Library/Developer/CommandLineTools/usr/bin | grep -E 'clang|swift|gcc|g++|make|go|ruby|python|perl' || echo "Developer tools not found"
+
+      echo "--- Dump environment variables"
+      printenv | sort || echo "printenv not available"
+
+      echo "--- Disk usage overview"
+      df -h || echo "df not found"
+
+      echo "--- Show running processes (snapshot)"
+      ps aux | head -20 || echo "ps not found"
