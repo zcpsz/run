@@ -1,0 +1,547 @@
+steps:
+  # ──────────────────────────────────────────────
+  # 1. Environment & Toolchain Verification
+  # ──────────────────────────────────────────────
+  - label: ":mag: Verify Environment"
+    key: "verify-env"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    command: |
+      echo "--- System Info"
+      uname -m
+      sysctl -n hw.memsize | awk '{printf "Memory: %.0f GB\n", $$1/1073741824}'
+      system_profiler SPHardwareDataType | grep -E "Chip|Cores|Memory"
+      sw_vers
+      csrutil status || true
+
+      echo "--- Xcode"
+      xcode-select -p
+      xcodebuild -version
+      xcodebuild -showsdks
+      xcrun simctl list runtimes
+
+      echo "--- Compilers & Build Tools"
+      clang --version
+      swift --version
+      make --version
+      cmake --version || echo "cmake not installed"
+      git --version
+      git lfs version || echo "git-lfs not installed"
+
+      echo "--- Package Managers"
+      brew --version
+      pod --version
+      fastlane --version || true
+      npm --version
+      node --version
+      pip3 --version
+      gem --version
+
+      echo "--- Android SDK"
+      echo "ANDROID_HOME: $ANDROID_HOME"
+      test -d "$ANDROID_HOME" || { echo "ANDROID_HOME directory does not exist"; exit 1; }
+      "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list_installed 2>/dev/null || \
+        "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list 2>/dev/null | head -40
+      adb version
+
+      echo "--- Cloud CLIs"
+      gh --version
+      aws --version || echo "aws cli not installed"
+      gcloud --version 2>/dev/null | head -2 || echo "gcloud not installed"
+
+      echo "--- Language Runtimes"
+      java -version 2>&1 || echo "java not installed"
+      go version || echo "go not installed"
+      ruby --version
+      python3 --version
+      deno --version || echo "deno not installed"
+
+      echo "--- Disk Space"
+      df -h /
+
+  # ──────────────────────────────────────────────
+  # 2. iOS Development Workflow
+  # ──────────────────────────────────────────────
+  - label: ":iphone: iOS Build & Test"
+    key: "ios-build"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    timeout_in_minutes: 30
+    command: |
+      echo "--- Create sample iOS project"
+      mkdir -p /tmp/TestiOSApp && cd /tmp/TestiOSApp
+
+      cat > Package.swift << 'SWIFT_EOF'
+      // swift-tools-version:5.9
+      import PackageDescription
+      let package = Package(
+          name: "TestiOSApp",
+          platforms: [.iOS(.v17)],
+          products: [
+              .library(name: "TestiOSApp", targets: ["TestiOSApp"]),
+          ],
+          targets: [
+              .target(name: "TestiOSApp", path: "Sources"),
+              .testTarget(name: "TestiOSAppTests", dependencies: ["TestiOSApp"], path: "Tests"),
+          ]
+      )
+      SWIFT_EOF
+
+      mkdir -p Sources Tests
+
+      cat > Sources/Calculator.swift << 'SWIFT_EOF'
+      import Foundation
+
+      public struct Calculator {
+          public init() {}
+          public func add(_ a: Int, _ b: Int) -> Int { a + b }
+          public func multiply(_ a: Int, _ b: Int) -> Int { a * b }
+          public func fibonacci(_ n: Int) -> Int {
+              guard n > 1 else { return n }
+              return fibonacci(n - 1) + fibonacci(n - 2)
+          }
+      }
+      SWIFT_EOF
+
+      cat > Tests/CalculatorTests.swift << 'SWIFT_EOF'
+      import XCTest
+      @testable import TestiOSApp
+
+      final class CalculatorTests: XCTestCase {
+          let calc = Calculator()
+          func testAdd() { XCTAssertEqual(calc.add(2, 3), 5) }
+          func testMultiply() { XCTAssertEqual(calc.multiply(4, 5), 20) }
+          func testFibonacci() { XCTAssertEqual(calc.fibonacci(10), 55) }
+      }
+      SWIFT_EOF
+
+      echo "--- Build iOS library"
+      swift build
+
+      echo "--- Run unit tests"
+      swift test
+
+      echo "--- Xcode SDK compilation check"
+      cd /tmp && mkdir -p XcodeTestApp && cd XcodeTestApp
+      cat > main.swift << 'SWIFT_EOF'
+      import UIKit
+      class AppDelegate: UIResponder, UIApplicationDelegate {
+          var window: UIWindow?
+      }
+      SWIFT_EOF
+
+      xcrun swiftc main.swift \
+        -sdk $(xcrun --sdk iphonesimulator --show-sdk-path) \
+        -target arm64-apple-ios17.0-simulator \
+        -parse-as-library \
+        -typecheck
+
+      echo "--- Boot iOS Simulator"
+      RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "
+      import json, sys
+      data = json.load(sys.stdin)
+      ios = [r for r in data['runtimes'] if r['platform'] == 'iOS' and r['isAvailable']]
+      if ios: print(ios[-1]['identifier'])
+      else: sys.exit(1)
+      ")
+      echo "Using runtime: $RUNTIME"
+      DEVICE_ID=$(xcrun simctl create "TestDevice" "iPhone 16" "$RUNTIME" 2>/dev/null || \
+                  xcrun simctl create "TestDevice" "iPhone 15" "$RUNTIME")
+      xcrun simctl boot "$DEVICE_ID"
+      xcrun simctl list devices | grep "TestDevice"
+      xcrun simctl shutdown "$DEVICE_ID" || true
+      xcrun simctl delete "$DEVICE_ID" || true
+      echo "iOS build & test passed"
+
+  # ──────────────────────────────────────────────
+  # 3. CocoaPods & Fastlane
+  # ──────────────────────────────────────────────
+  - label: ":cocoapod: CocoaPods & Fastlane"
+    key: "cocoapods"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    timeout_in_minutes: 20
+    command: |
+      echo "--- Verify CocoaPods"
+      pod --version
+      pod env
+
+      echo "--- Create project with CocoaPods"
+      mkdir -p /tmp/CocoapodsTest && cd /tmp/CocoapodsTest
+
+      cat > Podfile << 'EOF'
+      platform :ios, '17.0'
+      target 'CocoapodsTest' do
+        use_frameworks!
+        pod 'Alamofire', '~> 5.9'
+      end
+      EOF
+
+      mkdir -p CocoapodsTest.xcodeproj
+      cat > CocoapodsTest.xcodeproj/project.pbxproj << 'PBXEOF'
+      // !$*UTF8*$!
+      {
+        archiveVersion = 1;
+        classes = {};
+        objectVersion = 56;
+        objects = {
+          2D4F2C002B00000000000000 = {isa = PBXGroup; children = (); sourceTree = "<group>"; };
+          2D4F2C012B00000000000000 = {isa = PBXProject; buildConfigurationList = 2D4F2C042B00000000000000; compatibilityVersion = "Xcode 14.0"; mainGroup = 2D4F2C002B00000000000000; productRefGroup = 2D4F2C002B00000000000000; projectDirPath = ""; projectRoot = ""; targets = (2D4F2C052B00000000000000); };
+          2D4F2C042B00000000000000 = {isa = XCConfigurationList; buildConfigurations = (2D4F2C062B00000000000000); defaultConfigurationName = Release; };
+          2D4F2C052B00000000000000 = {isa = PBXNativeTarget; buildConfigurationList = 2D4F2C072B00000000000000; buildPhases = (); buildRules = (); dependencies = (); name = CocoapodsTest; productName = CocoapodsTest; productType = "com.apple.product-type.application"; };
+          2D4F2C062B00000000000000 = {isa = XCBuildConfiguration; buildSettings = { ALWAYS_SEARCH_USER_PATHS = NO; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; }; name = Release; };
+          2D4F2C072B00000000000000 = {isa = XCConfigurationList; buildConfigurations = (2D4F2C082B00000000000000); defaultConfigurationName = Release; };
+          2D4F2C082B00000000000000 = {isa = XCBuildConfiguration; buildSettings = { PRODUCT_BUNDLE_IDENTIFIER = com.test.CocoapodsTest; PRODUCT_NAME = "$(TARGET_NAME)"; SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; INFOPLIST_FILE = ""; }; name = Release; };
+        };
+        rootObject = 2D4F2C012B00000000000000;
+      }
+      PBXEOF
+
+      pod install --repo-update
+      echo "CocoaPods install succeeded"
+
+      echo "--- Verify Fastlane"
+      fastlane --version
+      echo "Fastlane is functional"
+
+  # ──────────────────────────────────────────────
+  # 4. Android Development Workflow
+  # ──────────────────────────────────────────────
+  - label: ":android: Android Build"
+    key: "android-build"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    timeout_in_minutes: 30
+    command: |
+      echo "--- Verify Android SDK"
+      echo "ANDROID_HOME: $ANDROID_HOME"
+      ls "$ANDROID_HOME/build-tools/"
+      ls "$ANDROID_HOME/platforms/"
+      adb version
+
+      echo "--- Create sample Android project"
+      mkdir -p /tmp/TestAndroidApp && cd /tmp/TestAndroidApp
+
+      BUILD_TOOLS=$(ls "$ANDROID_HOME/build-tools/" | sort -V | tail -1)
+      PLATFORM=$(ls "$ANDROID_HOME/platforms/" | sort -V | tail -1)
+      COMPILE_SDK=$(echo "$PLATFORM" | sed 's/android-//')
+      echo "Using build-tools: $BUILD_TOOLS, platform: $PLATFORM (API $COMPILE_SDK)"
+
+      mkdir -p gradle/wrapper
+      cat > gradle/wrapper/gradle-wrapper.properties << EOF
+      distributionBase=GRADLE_USER_HOME
+      distributionPath=wrapper/dists
+      distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-bin.zip
+      zipStoreBase=GRADLE_USER_HOME
+      zipStorePath=wrapper/dists
+      EOF
+
+      cat > settings.gradle << 'EOF'
+      rootProject.name = 'TestAndroidApp'
+      include ':app'
+      EOF
+
+      cat > build.gradle << 'EOF'
+      buildscript {
+          repositories {
+              google()
+              mavenCentral()
+          }
+          dependencies {
+              classpath 'com.android.tools.build:gradle:8.4.0'
+          }
+      }
+      allprojects {
+          repositories {
+              google()
+              mavenCentral()
+          }
+      }
+      EOF
+
+      mkdir -p app/src/main/java/com/test/app
+      mkdir -p app/src/main/res/values
+      mkdir -p app/src/test/java/com/test/app
+
+      cat > app/build.gradle << EOF
+      plugins {
+          id 'com.android.application'
+      }
+      android {
+          namespace 'com.test.app'
+          compileSdk $COMPILE_SDK
+          defaultConfig {
+              applicationId "com.test.app"
+              minSdk 24
+              targetSdk $COMPILE_SDK
+              versionCode 1
+              versionName "1.0"
+          }
+          compileOptions {
+              sourceCompatibility JavaVersion.VERSION_17
+              targetCompatibility JavaVersion.VERSION_17
+          }
+      }
+      dependencies {
+          testImplementation 'junit:junit:4.13.2'
+      }
+      EOF
+
+      cat > app/src/main/AndroidManifest.xml << 'EOF'
+      <?xml version="1.0" encoding="utf-8"?>
+      <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <application android:label="TestApp">
+              <activity android:name=".MainActivity" android:exported="true">
+                  <intent-filter>
+                      <action android:name="android.intent.action.MAIN" />
+                      <category android:name="android.intent.category.LAUNCHER" />
+                  </intent-filter>
+              </activity>
+          </application>
+      </manifest>
+      EOF
+
+      cat > app/src/main/java/com/test/app/MainActivity.java << 'EOF'
+      package com.test.app;
+      import android.app.Activity;
+      import android.os.Bundle;
+      public class MainActivity extends Activity {
+          @Override
+          protected void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+          }
+          public int add(int a, int b) { return a + b; }
+      }
+      EOF
+
+      cat > app/src/main/res/values/strings.xml << 'EOF'
+      <resources>
+          <string name="app_name">TestApp</string>
+      </resources>
+      EOF
+
+      cat > app/src/test/java/com/test/app/MainActivityTest.java << 'EOF'
+      package com.test.app;
+      import org.junit.Test;
+      import static org.junit.Assert.*;
+      public class MainActivityTest {
+          @Test
+          public void testAdd() {
+              MainActivity activity = new MainActivity();
+              assertEquals(5, activity.add(2, 3));
+          }
+      }
+      EOF
+
+      echo "--- Build Android project"
+      curl -sL https://services.gradle.org/distributions/gradle-8.7-bin.zip -o /tmp/gradle.zip
+      unzip -qo /tmp/gradle.zip -d /tmp
+      /tmp/gradle-8.7/bin/gradle wrapper --gradle-version 8.7
+      ./gradlew assembleDebug --no-daemon --warning-mode=none
+      echo "Android build succeeded"
+
+      echo "--- Run Android unit tests"
+      ./gradlew testDebugUnitTest --no-daemon --warning-mode=none
+      echo "Android unit tests passed"
+
+  # ──────────────────────────────────────────────
+  # 5. Multi-Language Build Tests
+  # ──────────────────────────────────────────────
+  - label: ":hammer: Language & Tool Builds"
+    key: "language-builds"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    timeout_in_minutes: 15
+    command: |
+      echo "--- Go build & test"
+      mkdir -p /tmp/GoTest && cd /tmp/GoTest
+      cat > main.go << 'EOF'
+      package main
+      import "fmt"
+      func Add(a, b int) int { return a + b }
+      func main() { fmt.Println("Result:", Add(2, 3)) }
+      EOF
+      cat > main_test.go << 'EOF'
+      package main
+      import "testing"
+      func TestAdd(t *testing.T) {
+          if Add(2, 3) != 5 { t.Fatal("expected 5") }
+      }
+      func BenchmarkAdd(b *testing.B) {
+          for i := 0; i < b.N; i++ { Add(2, 3) }
+      }
+      EOF
+      go mod init gotest
+      go build -v .
+      go test -v -bench=. .
+
+      echo "--- Node.js TypeScript check"
+      mkdir -p /tmp/NodeTest && cd /tmp/NodeTest
+      cat > package.json << 'EOF'
+      {"name": "node-test", "version": "1.0.0", "scripts": {"test": "node test.js"}}
+      EOF
+      mkdir -p src
+      cat > src/index.ts << 'EOF'
+      export function greet(name: string): string { return `Hello, ${name}!`; }
+      EOF
+      cat > tsconfig.json << 'EOF'
+      {"compilerOptions": {"target": "ES2022", "module": "commonjs", "strict": true, "outDir": "dist", "rootDir": "src"}, "include": ["src"]}
+      EOF
+      cat > test.js << 'EOF'
+      const assert = require("assert");
+      assert.strictEqual(typeof process.version, "string");
+      console.log("Node version:", process.version);
+      console.log("All assertions passed");
+      EOF
+      npm install
+      npx tsc --noEmit
+      npm test
+
+      echo "--- Python test"
+      mkdir -p /tmp/PythonTest && cd /tmp/PythonTest
+      cat > calculator.py << 'EOF'
+      def add(a, b): return a + b
+      def fibonacci(n):
+          if n <= 1: return n
+          a, b = 0, 1
+          for _ in range(2, n + 1): a, b = b, a + b
+          return b
+      EOF
+      cat > test_calculator.py << 'EOF'
+      import unittest
+      from calculator import add, fibonacci
+      class TestCalculator(unittest.TestCase):
+          def test_add(self): self.assertEqual(add(2, 3), 5)
+          def test_fibonacci(self): self.assertEqual(fibonacci(10), 55)
+      if __name__ == "__main__": unittest.main()
+      EOF
+      python3 -m pytest test_calculator.py -v 2>/dev/null || python3 -m unittest test_calculator -v
+
+      echo "--- Ruby test"
+      mkdir -p /tmp/RubyTest && cd /tmp/RubyTest
+      cat > calculator.rb << 'EOF'
+      class Calculator
+        def add(a, b) = a + b
+        def multiply(a, b) = a * b
+      end
+      EOF
+      cat > test_calculator.rb << 'EOF'
+      require 'minitest/autorun'
+      require_relative 'calculator'
+      class TestCalculator < Minitest::Test
+        def setup; @calc = Calculator.new; end
+        def test_add; assert_equal 5, @calc.add(2, 3); end
+        def test_multiply; assert_equal 20, @calc.multiply(4, 5); end
+      end
+      EOF
+      ruby test_calculator.rb
+
+      echo "--- C/C++ compile & test"
+      mkdir -p /tmp/CTest && cd /tmp/CTest
+      cat > main.c << 'EOF'
+      #include <stdio.h>
+      #include <assert.h>
+      int factorial(int n) { if (n <= 1) return 1; return n * factorial(n - 1); }
+      int main() {
+          assert(factorial(5) == 120);
+          printf("All C tests passed\n");
+          return 0;
+      }
+      EOF
+      clang -O2 -o test_c main.c && ./test_c
+
+      cat > main.cpp << 'EOF'
+      #include <iostream>
+      #include <cassert>
+      #include <vector>
+      #include <numeric>
+      int main() {
+          std::vector<int> v = {1, 2, 3, 4, 5};
+          assert(std::accumulate(v.begin(), v.end(), 0) == 15);
+          std::cout << "All C++ tests passed" << std::endl;
+          return 0;
+      }
+      EOF
+      clang++ -std=c++17 -O2 -o test_cpp main.cpp && ./test_cpp
+
+  # ──────────────────────────────────────────────
+  # 6. CI/CD Tools & Integration Tests
+  # ──────────────────────────────────────────────
+  - label: ":gear: CI/CD & DevOps Tools"
+    key: "ci-tools"
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
+    timeout_in_minutes: 10
+    command: |
+      echo "--- Git operations"
+      mkdir -p /tmp/GitTest && cd /tmp/GitTest
+      git init
+      git config user.email "test@test.com"
+      git config user.name "Test"
+      echo "hello" > file.txt
+      git add . && git commit -m "init"
+      git checkout -b feature
+      echo "world" >> file.txt
+      git add . && git commit -m "feature"
+      git checkout main 2>/dev/null || git checkout master
+      git merge feature --no-edit
+      git log --oneline
+
+      echo "--- Git LFS"
+      git lfs version
+
+      echo "--- Homebrew"
+      brew --version
+      brew info jq --json=v2 | head -5
+
+      echo "--- Keychain access"
+      security list-keychains
+      security find-identity -v -p codesigning || echo "No signing identities (expected in CI)"
+
+      echo "All CI/CD tool checks passed"
+
+  # ──────────────────────────────────────────────
+  # 7. Summary
+  # ──────────────────────────────────────────────
+  - wait: ~
+    continue_on_failure: true
+
+  - label: ":bar_chart: Test Summary"
+    command: |
+      echo "## macOS Runner Image Test Results"
+      echo ""
+      echo "Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      echo "macOS: $(sw_vers -productVersion)"
+      echo "Xcode: $(xcodebuild -version | head -1)"
+      echo ""
+      echo "All test suites completed. Check individual steps above for details."
+    agents:
+      queue: "local-mac-queue"
+    plugins:
+      - getmac-io/getmac#main:
+          project-id: "${GETMAC_PROJECT_ID}"
+          image: "${GETMAC_IMAGE:-macos-tahoe}"
