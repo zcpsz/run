@@ -70,6 +70,27 @@ jobs:
       - name: Show running processes (snapshot)
         run: ps aux | head -20 || echo "ps not found"
 
+      - name: Code Signing Diagnostics 🔍
+        run: |
+          echo "=== 1. XCODE ENVIRONMENT ==="
+          xcode-select -p
+          xcodebuild -version
+          
+          echo "=== 2. KEYCHAIN STATUS ==="
+          # Lists accessible keychains to ensure your build keychain is prioritized
+          security list-keychains
+          
+          echo "=== 3. VALID SIGNING IDENTITIES ==="
+          # This checks Scenario #1: If your cert is loaded, unlocked, and trusted
+          # Look for "1 valid identities found". If it says "0", your cert is untrusted or the keychain is locked.
+          security find-identity -v -p codesigning
+          
+          echo "=== 4. APPLE WWDR CERTIFICATES ==="
+          # This checks Scenario #2: If the intermediate certificates are present
+          # GitHub runners will list several. If GetMac outputs nothing, this is your culprit.
+          security find-certificate -a -c "Worldwide Developer Relations" | grep "alis" || echo "❌ No WWDR certificates found!"
+          security find-certificate -a -c "Developer ID" | grep "alis" || echo "❌ No Developer ID certificates found!"
+
   audit-runner-github:
     runs-on: macos-26
 
@@ -135,3 +156,24 @@ jobs:
 
       - name: Show running processes (snapshot)
         run: ps aux | head -20 || echo "ps not found"
+      
+      - name: Code Signing Diagnostics 🔍
+        run: |
+          echo "=== 1. XCODE ENVIRONMENT ==="
+          xcode-select -p
+          xcodebuild -version
+          
+          echo "=== 2. KEYCHAIN STATUS ==="
+          # Lists accessible keychains to ensure your build keychain is prioritized
+          security list-keychains
+          
+          echo "=== 3. VALID SIGNING IDENTITIES ==="
+          # This checks Scenario #1: If your cert is loaded, unlocked, and trusted
+          # Look for "1 valid identities found". If it says "0", your cert is untrusted or the keychain is locked.
+          security find-identity -v -p codesigning
+          
+          echo "=== 4. APPLE WWDR CERTIFICATES ==="
+          # This checks Scenario #2: If the intermediate certificates are present
+          # GitHub runners will list several. If GetMac outputs nothing, this is your culprit.
+          security find-certificate -a -c "Worldwide Developer Relations" | grep "alis" || echo "❌ No WWDR certificates found!"
+          security find-certificate -a -c "Developer ID" | grep "alis" || echo "❌ No Developer ID certificates found!"
