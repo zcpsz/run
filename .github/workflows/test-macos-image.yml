@@ -183,31 +183,103 @@ jobs:
             -typecheck
           echo "✅ Xcode iOS SDK compilation check passed"
 
-      - name: "📱 Boot iOS Simulator"
+      - name: "📱 iPhone 16 simulator: boot, build & test"
+        env:
+          DEVICE_NAME: "iPhone 16"
         run: |
-          RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "
+          # Use the newest iOS runtime that is no newer than the active Xcode's
+          # simulator SDK and supports the device: an image can carry a runtime newer
+          # than its Xcode, which Xcode can't drive, and the iOS 27.1 runtime only
+          # supports the iPhone Duo, so with Xcode 27.1 iPhone 16 runs on iOS 27.0.
+          SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          echo "Xcode simulator SDK: iOS $SDK_VERSION"
+
+          PICK=$(xcrun simctl list runtimes -j | python3 -c "
           import json, sys
-          data = json.load(sys.stdin)
-          ios = [r for r in data['runtimes'] if r['platform'] == 'iOS' and r['isAvailable']]
-          if ios:
-              print(ios[-1]['identifier'])
-          else:
-              sys.exit(1)
-          ")
+          sdk, device = sys.argv[1], sys.argv[2]
+          major_minor = lambda v: tuple(int(x) for x in v.split('.')[:2])
+          ios = [r for r in json.load(sys.stdin)['runtimes'] if r['platform'] == 'iOS' and r['isAvailable']]
+          usable = [r for r in ios if major_minor(r['version']) <= major_minor(sdk)]
+          match = [r for r in usable if device in [d['name'] for d in r.get('supportedDeviceTypes', [])]]
+          if not match:
+              sys.exit('no iOS runtime up to %s supports %s; available: %s' % (sdk, device, ', '.join(r['version'] for r in ios) or 'none'))
+          runtime = max(match, key=lambda r: major_minor(r['version']))
+          print(runtime['identifier'], runtime['version'])
+          " "$SDK_VERSION" "$DEVICE_NAME")
+          read -r RUNTIME RUNTIME_VERSION <<< "$PICK"
           echo "Using runtime: $RUNTIME"
 
-          DEVICE_ID=$(xcrun simctl create "TestDevice" "iPhone 16" "$RUNTIME" 2>/dev/null || \
-                      xcrun simctl create "TestDevice" "iPhone 15" "$RUNTIME")
+          DEVICE_ID=$(xcrun simctl create "TestDevice" "$DEVICE_NAME" "$RUNTIME")
+          trap 'xcrun simctl shutdown "$DEVICE_ID" || true; xcrun simctl delete "$DEVICE_ID" || true' EXIT
           echo "Created device: $DEVICE_ID"
 
-          xcrun simctl boot "$DEVICE_ID"
-          xcrun simctl list devices | grep "TestDevice"
-          echo "✅ iOS Simulator booted successfully"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          BOOTED_VERSION=$(xcrun simctl getenv "$DEVICE_ID" SIMULATOR_RUNTIME_VERSION)
+          echo "Booted $DEVICE_NAME on iOS $BOOTED_VERSION"
+          test "$(echo "$BOOTED_VERSION" | cut -d. -f1-2)" = "$(echo "$RUNTIME_VERSION" | cut -d. -f1-2)" || { echo "::error::booted iOS $BOOTED_VERSION, expected $RUNTIME_VERSION"; exit 1; }
 
-          # Cleanup
-          xcrun simctl shutdown "$DEVICE_ID" || true
-          xcrun simctl delete "$DEVICE_ID" || true
-          xcrun simctl shutdown all 2>/dev/null || true
+          # swift build/test above ran on macOS; this builds the package for iOS
+          # and runs its tests inside the booted simulator.
+          cd /tmp/TestiOSApp
+          xcodebuild test -scheme TestiOSApp -destination "id=$DEVICE_ID" > /tmp/xcodebuild-ios-test.log 2>&1 \
+            || { tail -50 /tmp/xcodebuild-ios-test.log; exit 1; }
+          grep -E "Executed [0-9]+ test|TEST SUCCEEDED" /tmp/xcodebuild-ios-test.log
+          grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" /tmp/xcodebuild-ios-test.log \
+            || { echo "::error::no iOS tests were executed"; exit 1; }
+          echo "✅ Built and tested on $DEVICE_NAME, iOS $BOOTED_VERSION"
+
+      - name: "📱 iOS 27.1 simulator: boot newest supported iPhone"
+        env:
+          IOS_RUNTIME: "27.1"
+        run: |
+          # Boots the newest iPhone the iOS 27.1 runtime supports (it only supports
+          # the iPhone Duo). If the active Xcode's SDK is 27.1 or newer, the package is
+          # also built and tested on it; an older Xcode can't build for 27.1, so then
+          # the step only proves the runtime boots.
+          PICK=$(xcrun simctl list runtimes -j | python3 -c "
+          import json, sys
+          want = sys.argv[1]
+          ios = [r for r in json.load(sys.stdin)['runtimes'] if r['platform'] == 'iOS' and r['isAvailable']]
+          match = [r for r in ios if r['version'].split('.')[:2] == want.split('.')]
+          if not match:
+              print('none')
+              sys.exit()
+          runtime = match[-1]
+          iphones = [d for d in runtime.get('supportedDeviceTypes', []) if d.get('productFamily') == 'iPhone']
+          print('Supported iPhones:', ', '.join(d['name'] for d in iphones) or 'none', file=sys.stderr)
+          if not iphones:
+              sys.exit('iOS %s runtime supports no iPhone' % runtime['version'])
+          print(runtime['identifier'], iphones[-1]['identifier'])
+          " "$IOS_RUNTIME")
+          if [ "$PICK" = "none" ]; then
+            echo "::notice::iOS $IOS_RUNTIME runtime is not installed on this image; skipping"
+            exit 0
+          fi
+          read -r RUNTIME DEVICE_TYPE <<< "$PICK"
+          echo "Using runtime: $RUNTIME"
+          echo "Using device type: $DEVICE_TYPE"
+
+          DEVICE_ID=$(xcrun simctl create "TestDevice-$IOS_RUNTIME" "$DEVICE_TYPE" "$RUNTIME")
+          trap 'xcrun simctl shutdown "$DEVICE_ID" || true; xcrun simctl delete "$DEVICE_ID" || true' EXIT
+          echo "Created device: $DEVICE_ID"
+
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          BOOTED_VERSION=$(xcrun simctl getenv "$DEVICE_ID" SIMULATOR_RUNTIME_VERSION)
+          test "$(echo "$BOOTED_VERSION" | cut -d. -f1-2)" = "$IOS_RUNTIME" || { echo "::error::booted iOS $BOOTED_VERSION, expected $IOS_RUNTIME"; exit 1; }
+          echo "✅ iOS $BOOTED_VERSION simulator booted"
+
+          SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
+          if ! python3 -c "import sys; v = lambda s: tuple(int(x) for x in s.split('.')[:2]); sys.exit(v(sys.argv[1]) < v(sys.argv[2]))" "$SDK_VERSION" "$IOS_RUNTIME"; then
+            echo "::notice::Xcode simulator SDK is iOS $SDK_VERSION, older than $IOS_RUNTIME; boot only"
+            exit 0
+          fi
+          cd /tmp/TestiOSApp
+          xcodebuild test -scheme TestiOSApp -destination "id=$DEVICE_ID" > /tmp/xcodebuild-ios-$IOS_RUNTIME-test.log 2>&1 \
+            || { tail -50 /tmp/xcodebuild-ios-$IOS_RUNTIME-test.log; exit 1; }
+          grep -E "Executed [0-9]+ test|TEST SUCCEEDED" /tmp/xcodebuild-ios-$IOS_RUNTIME-test.log
+          grep -qE "Executed [1-9][0-9]* tests?, with 0 failures" /tmp/xcodebuild-ios-$IOS_RUNTIME-test.log \
+            || { echo "::error::no iOS $IOS_RUNTIME tests were executed"; exit 1; }
+          echo "✅ Built and tested on iOS $BOOTED_VERSION"
 
       # ──────────────────────────────────────────
       # 3. CocoaPods & Fastlane
