@@ -145,34 +145,34 @@ steps:
         -typecheck
 
       echo "--- Boot iPhone 16 on the Xcode SDK's iOS runtime"
-      # Use the iOS runtime that matches the active Xcode's simulator SDK, not
-      # the newest runtime installed: an image can carry a runtime newer than
-      # its Xcode (iOS 27.1 next to Xcode 27.0), and Xcode can't drive that one.
+      # Use the newest iOS runtime that is no newer than the active Xcode's
+      # simulator SDK and supports the device: an image can carry a runtime newer
+      # than its Xcode, which Xcode can't drive, and the iOS 27.1 runtime only
+      # supports the iPhone Duo, so with Xcode 27.1 iPhone 16 runs on iOS 27.0.
       # $$ escapes runtime variables from Buildkite's upload-time interpolation.
       DEVICE_NAME="iPhone 16"
       SDK_VERSION=$(xcrun --sdk iphonesimulator --show-sdk-version)
       echo "Xcode simulator SDK: iOS $$SDK_VERSION"
-      RUNTIME=$(xcrun simctl list runtimes -j | python3 -c "
+      PICK=$(xcrun simctl list runtimes -j | python3 -c "
       import json, sys
       sdk, device = sys.argv[1], sys.argv[2]
-      major_minor = lambda v: v.split('.')[:2]
+      major_minor = lambda v: tuple(int(x) for x in v.split('.')[:2])
       ios = [r for r in json.load(sys.stdin)['runtimes'] if r['platform'] == 'iOS' and r['isAvailable']]
-      match = [r for r in ios if major_minor(r['version']) == major_minor(sdk)]
+      usable = [r for r in ios if major_minor(r['version']) <= major_minor(sdk)]
+      match = [r for r in usable if device in [d['name'] for d in r.get('supportedDeviceTypes', [])]]
       if not match:
-          sys.exit('no iOS %s runtime installed; available: %s' % (sdk, ', '.join(r['version'] for r in ios) or 'none'))
-      runtime = match[-1]
-      names = [d['name'] for d in runtime.get('supportedDeviceTypes', [])]
-      if device not in names:
-          sys.exit('iOS %s runtime does not support %s; supported: %s' % (runtime['version'], device, ', '.join(names)))
-      print(runtime['identifier'])
+          sys.exit('no iOS runtime up to %s supports %s; available: %s' % (sdk, device, ', '.join(r['version'] for r in ios) or 'none'))
+      runtime = max(match, key=lambda r: major_minor(r['version']))
+      print(runtime['identifier'], runtime['version'])
       " "$$SDK_VERSION" "$$DEVICE_NAME")
+      read -r RUNTIME RUNTIME_VERSION <<< "$$PICK"
       echo "Using runtime: $$RUNTIME"
       DEVICE_ID=$(xcrun simctl create "TestDevice" "$$DEVICE_NAME" "$$RUNTIME")
       trap 'xcrun simctl shutdown "$$DEVICE_ID" || true; xcrun simctl delete "$$DEVICE_ID" || true' EXIT
       xcrun simctl bootstatus "$$DEVICE_ID" -b
       BOOTED_VERSION=$(xcrun simctl getenv "$$DEVICE_ID" SIMULATOR_RUNTIME_VERSION)
       echo "Booted $$DEVICE_NAME on iOS $$BOOTED_VERSION"
-      test "$(echo "$$BOOTED_VERSION" | cut -d. -f1-2)" = "$(echo "$$SDK_VERSION" | cut -d. -f1-2)" || { echo "booted iOS $$BOOTED_VERSION, expected $$SDK_VERSION"; exit 1; }
+      test "$(echo "$$BOOTED_VERSION" | cut -d. -f1-2)" = "$(echo "$$RUNTIME_VERSION" | cut -d. -f1-2)" || { echo "booted iOS $$BOOTED_VERSION, expected $$RUNTIME_VERSION"; exit 1; }
 
       echo "--- Build & test the package on the iPhone 16 simulator"
       # swift build/test above ran on macOS; this builds the package for iOS
@@ -195,9 +195,9 @@ steps:
           image: "${GETMAC_IMAGE:-macos-tahoe}"
     timeout_in_minutes: 15
     command: |
-      # The iOS 27.1 runtime ships on the image ahead of Xcode 27.2, which is
-      # the first Xcode that can build for it. Until then this only proves the
-      # runtime boots, on the newest iPhone it supports.
+      # Proves the iOS 27.1 runtime boots, on the newest iPhone it supports (it
+      # only supports the iPhone Duo). Building for it is covered by the GitHub
+      # workflow, which has the sample package in the same job.
       IOS_RUNTIME="27.1"
       PICK=$(xcrun simctl list runtimes -j | python3 -c "
       import json, sys
