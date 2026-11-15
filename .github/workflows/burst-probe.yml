@@ -1,0 +1,38 @@
+# Burst-capacity probe: 12 concurrent jobs against 4 dedicated VM slots
+# (getmac111 + getmac112, 2 each), so 8 must overflow to the shared fleet.
+# Its purpose is to produce the dedicated-vs-shared minute split that the
+# ATG burst accounting has to measure, and to show the placement order.
+#
+# Runs on push to its own branch, never on main. No secrets: this repo is public.
+name: burst-probe
+
+on:
+  push:
+    branches:
+      - 'burst-probe/**'
+
+jobs:
+  probe:
+    runs-on: getmac-tahoe
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - name: Where did this job land
+        run: |
+          echo "job_index=${{ matrix.n }}"
+          echo "runner_name=$RUNNER_NAME"
+          echo "guest_hostname=$(hostname -s)"
+          echo "macos=$(sw_vers -productVersion)"
+          echo "silicon=$(sysctl -n machdep.cpu.brand_string)"
+          echo "vcpu=$(sysctl -n hw.ncpu)"
+          echo "mem_GiB=$(( $(sysctl -n hw.memsize) / 1073741824 ))"
+          echo "started_utc=$(date -u +%FT%TZ)"
+
+      - name: Hold the slot
+        run: sleep 1200
+
+      - name: Done
+        run: echo "finished_utc=$(date -u +%FT%TZ)"
