@@ -2,6 +2,12 @@ name: "⚔️ Runner Battle: GitHub vs GetMac.io"
 
 on:
   workflow_dispatch:
+    inputs:
+      getmac_label:
+        description: "GetMac runner label to benchmark"
+        required: true
+        default: "getmac-tahoe-rc"
+        type: string
 
 jobs:
   benchmark:
@@ -21,8 +27,8 @@ jobs:
             # IMPORTANT: Ensure your GetMac.io runner has these labels or update this line
             # You must manually update this machine to macOS 26 Tahoe to test "Version 26"
           - provider: 'GetMac.io'
-            runner: getmac-tahoe
-            os: 'GetMac macOS Tahoe '
+            runner: ${{ inputs.getmac_label }}
+            os: 'GetMac ${{ inputs.getmac_label }}'
 
     runs-on: ${{ matrix.runner }}
 
@@ -48,6 +54,15 @@ jobs:
           echo "--- Software Info ---"
           sw_vers
           xcodebuild -version
+        shell: bash
+
+      - name: "🏷️ Which image is this"
+        if: matrix.provider == 'GetMac.io'
+        run: |
+          echo "guest agent: $(/usr/local/bin/agent --version 2>&1 | head -1)"
+          echo "spotlight: $(mdutil -s / 2>&1 | tail -1 | xargs)"
+          echo "booted: $(sysctl -n kern.boottime)"
+          echo "cpu: $(sysctl -n hw.ncpu) vCPU, $(( $(sysctl -n hw.memsize) / 1073741824 )) GB"
         shell: bash
 
       - name: "📦 Install Dependencies (CocoaPods)"
